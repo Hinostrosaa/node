@@ -116,50 +116,103 @@ export const deleteMedico = async (req, res) => {
     }
 };
 
-// CRUD para Citas
+// CRUD para Citas - VERSIÓN CORREGIDA
 
 export const getAllCita = async (req, res) => {
     try {
-        const citas = await Citas.findAll();  // Obtenemos todos las Citas
+        const citas = await Cita.findAll({
+            include: [
+                { model: Paciente, as: 'paciente' },
+                { model: Medico, as: 'medico' }
+            ]
+        });
         res.json(citas);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ 
+            message: error.message,
+            details: error.errors?.map(e => e.message) 
+        });
     }
 };
 
-
-
-// Crear un Citas
 export const createCita = async (req, res) => {
     try {
-        await Cita.create(req.body);
-        res.json({ message: 'Cita creada correctamente' });
+        // Validación de campos requeridos
+        if (!req.body.id_paciente || !req.body.id_medico || !req.body.fecha) {
+            return res.status(400).json({ 
+                error: 'Faltan campos requeridos: id_paciente, id_medico o fecha' 
+            });
+        }
+
+        // Verificar existencia de paciente y médico
+        const pacienteExists = await Paciente.findByPk(req.body.id_paciente);
+        const medicoExists = await Medico.findByPk(req.body.id_medico);
+        
+        if (!pacienteExists || !medicoExists) {
+            return res.status(404).json({ 
+                error: 'Paciente o Médico no encontrado' 
+            });
+        }
+
+        // Crear la cita
+        const nuevaCita = await Cita.create({
+            id_paciente: req.body.id_paciente,
+            id_medico: req.body.id_medico,
+            fecha: new Date(req.body.fecha),
+            estado: req.body.estado || 'pendiente',
+            numero_confirmacion: req.body.numero_confirmacion || null
+        });
+
+        res.status(201).json({
+            message: 'Cita creada correctamente',
+            cita: nuevaCita
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Error al crear cita:', error);
+        res.status(500).json({ 
+            error: 'Error al crear cita',
+            details: error.errors?.map(e => e.message) || error.message 
+        });
     }
 };
 
-// Actualizar un Citas
 export const updateCita = async (req, res) => {
     try {
-        await Cita.update(req.body, {
+        const [updated] = await Cita.update(req.body, {
             where: { id_cita: req.params.id }
         });
-        res.json({ message: 'Cita actualizado correctamente' });
+        
+        if (updated) {
+            const updatedCita = await Cita.findByPk(req.params.id);
+            return res.json({
+                message: 'Cita actualizada correctamente',
+                cita: updatedCita
+            });
+        }
+        res.status(404).json({ message: 'Cita no encontrada' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ 
+            message: error.message,
+            details: error.errors?.map(e => e.message) 
+        });
     }
 };
 
-// Eliminar un Citas
 export const deleteCita = async (req, res) => {
     try {
-        await Cita.destroy({
+        const deleted = await Cita.destroy({
             where: { id_cita: req.params.id }
         });
-        res.json({ message: 'Cita eliminado correctamente' });
+        
+        if (deleted) {
+            return res.json({ message: 'Cita eliminada correctamente' });
+        }
+        res.status(404).json({ message: 'Cita no encontrada' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ 
+            message: error.message,
+            details: error.errors?.map(e => e.message) 
+        });
     }
 };
 
