@@ -68,6 +68,7 @@ const Medico = db.define('medico', {
 
 // Definir el modelo para citas--
 // Definir el modelo para citas - Versión corregida
+// Modelo Cita (versión corregida)
 const Cita = db.define('citas', {
     id_cita: {
         type: DataTypes.INTEGER,
@@ -96,11 +97,11 @@ const Cita = db.define('citas', {
         allowNull: false 
     },
     estado: { 
-        type: DataTypes.ENUM('pendiente', 'confirmada', 'cancelada'),
+        type: DataTypes.ENUM('pendiente', 'confirmada', 'cancelada', 'completada', 'reprogramada'),
         defaultValue: 'pendiente'
     },
     numero_confirmacion: { 
-        type: DataTypes.STRING,
+        type: DataTypes.STRING(20),
         allowNull: true 
     }
 }, {
@@ -108,18 +109,86 @@ const Cita = db.define('citas', {
     tableName: 'citas'
 });
 
-// Definir el modelo para historial de citas
-const HistorialCita = db.define('historial_cita', {
-    id_paciente: { type: DataTypes.INTEGER },
-    id_cita: { type: DataTypes.INTEGER },
-    fecha_atencion: { type: DataTypes.DATE },
-    estado: { type: DataTypes.ENUM, values: ['pendiente', 'confirmada', 'cancelada'] }
+// Modelo HistorialCita (VERSIÓN MEJORADA)
+const HistorialCita = db.define('historial_citas', {
+    id_historial: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    id_cita: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+            model: 'citas',
+            key: 'id_cita'
+        }
+    },
+    id_paciente: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+            model: 'paciente',
+            key: 'id_paciente'
+        }
+    },
+    id_medico: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+            model: 'medico',
+            key: 'id_medico'
+        }
+    },
+    fecha_original: {
+        type: DataTypes.DATE,
+        allowNull: false
+    },
+    fecha_cambio: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW
+    },
+    estado_anterior: {
+        type: DataTypes.ENUM('pendiente', 'confirmada', 'cancelada', 'completada', 'reprogramada')
+    },
+    estado_actual: {
+        type: DataTypes.ENUM('pendiente', 'confirmada', 'cancelada', 'completada', 'reprogramada'),
+        allowNull: false
+    },
+    motivo_cambio: {
+        type: DataTypes.STRING(255),
+        allowNull: true
+    },
+    realizado_por: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        defaultValue: 'sistema'
+    },
+    observaciones: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    }
 }, {
-    timestamps: true,  // Para manejar automáticamente createdAt y updatedAt
-    tableName: 'historial_citas'  // Asegúrate de que coincida con el nombre exacto de la tabla
+    timestamps: true,
+    tableName: 'historial_citas',
+    indexes: [
+        {
+            fields: ['id_paciente']
+        },
+        {
+            fields: ['id_medico']
+        },
+        {
+            fields: ['fecha_cambio']
+        },
+        {
+            fields: ['estado_actual']
+        }
+    ]
 });
 
-// Relaciones CORREGIDAS
+// Relaciones MEJORADAS
 Paciente.hasMany(Cita, { 
     foreignKey: 'id_paciente',
     as: 'citas'
@@ -136,13 +205,15 @@ Cita.belongsTo(Medico, {
     foreignKey: 'id_medico',
     as: 'medico'
 });
+
+// Relaciones del Historial
 Paciente.hasMany(HistorialCita, { 
     foreignKey: 'id_paciente',
-    as: 'historial'
+    as: 'historial_citas'
 });
-HistorialCita.belongsTo(Paciente, { 
-    foreignKey: 'id_paciente',
-    as: 'paciente'
+Medico.hasMany(HistorialCita, { 
+    foreignKey: 'id_medico',
+    as: 'historial_citas'
 });
 Cita.hasMany(HistorialCita, { 
     foreignKey: 'id_cita',
@@ -151,6 +222,14 @@ Cita.hasMany(HistorialCita, {
 HistorialCita.belongsTo(Cita, { 
     foreignKey: 'id_cita',
     as: 'cita'
+});
+HistorialCita.belongsTo(Paciente, { 
+    foreignKey: 'id_paciente',
+    as: 'paciente'
+});
+HistorialCita.belongsTo(Medico, { 
+    foreignKey: 'id_medico',
+    as: 'medico'
 });
 
 export { Paciente, Medico, Cita, HistorialCita };

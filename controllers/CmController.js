@@ -220,9 +220,206 @@ export const deleteCita = async (req, res) => {
 
 export const getAllHistorialCita = async (req, res) => {
     try {
-        const historial_citas = await HistorialCita.findAll();  // Obtenemos todos los Historial_citas
-        res.json(historial_citas);
+        const { id_paciente, id_medico, estado, fecha_inicio, fecha_fin } = req.query;
+        
+        const where = {};
+        if (id_paciente) where.id_paciente = id_paciente;
+        if (id_medico) where.id_medico = id_medico;
+        if (estado) where.estado_actual = estado;
+        
+        if (fecha_inicio && fecha_fin) {
+            where.fecha_cambio = {
+                [Op.between]: [new Date(fecha_inicio), new Date(fecha_fin)]
+            };
+        }
+
+        const historial = await HistorialCita.findAll({
+            where,
+            include: [
+                { 
+                    model: Paciente, 
+                    as: 'paciente',
+                    attributes: ['id_paciente', 'nombre', 'dni']
+                },
+                { 
+                    model: Medico, 
+                    as: 'medico',
+                    attributes: ['id_medico', 'nombre', 'especialidad']
+                },
+                { 
+                    model: Cita,
+                    as: 'cita',
+                    attributes: ['id_cita', 'fecha']
+                }
+            ],
+            order: [['fecha_cambio', 'DESC']],
+            attributes: { 
+                exclude: ['createdAt', 'updatedAt'] 
+            }
+        });
+
+        res.json({
+            success: true,
+            count: historial.length,
+            data: historial
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Error al obtener historial de citas:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Error al obtener historial de citas',
+            details: error.errors?.map(e => e.message) || error.message 
+        });
+    }
+};
+
+export const getHistorialByCita = async (req, res) => {
+    try {
+        const historial = await HistorialCita.findAll({
+            where: { id_cita: req.params.id },
+            include: [
+                { 
+                    model: Paciente, 
+                    as: 'paciente',
+                    attributes: ['nombre']
+                },
+                { 
+                    model: Medico, 
+                    as: 'medico',
+                    attributes: ['nombre', 'especialidad']
+                }
+            ],
+            order: [['fecha_cambio', 'DESC']]
+        });
+
+        if (!historial || historial.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontró historial para esta cita'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: historial
+        });
+    } catch (error) {
+        console.error('Error al obtener historial por cita:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al obtener historial de la cita',
+            details: error.message
+        });
+    }
+};
+
+export const getDetalleHistorial = async (req, res) => {
+    try {
+        const registro = await HistorialCita.findByPk(req.params.id, {
+            include: [
+                { 
+                    model: Paciente, 
+                    as: 'paciente',
+                    attributes: ['id_paciente', 'nombre', 'dni', 'telefono']
+                },
+                { 
+                    model: Medico, 
+                    as: 'medico',
+                    attributes: ['id_medico', 'nombre', 'especialidad']
+                },
+                { 
+                    model: Cita,
+                    as: 'cita',
+                    attributes: ['id_cita', 'fecha', 'numero_confirmacion']
+                }
+            ]
+        });
+
+        if (!registro) {
+            return res.status(404).json({
+                success: false,
+                message: 'Registro de historial no encontrado'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                id_historial: registro.id_historial,
+                fecha_original: registro.fecha_original,
+                fecha_cambio: registro.fecha_cambio,
+                estado_anterior: registro.estado_anterior,
+                estado_actual: registro.estado_actual,
+                motivo_cambio: registro.motivo_cambio,
+                observaciones: registro.observaciones,
+                paciente: registro.paciente,
+                medico: registro.medico,
+                cita: registro.cita
+            }
+        });
+    } catch (error) {
+        console.error('Error al obtener detalle de historial:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al obtener detalle del registro',
+            details: error.message
+        });
+    }
+};
+
+export const createRegistroHistorial = async (req, res) => {
+    try {
+        // Validación de campos requeridos
+        if (!req.body.id_cita || !req.body.id_paciente || !req.body.id_medico || !req.body.estado_actual) {
+            return res.status(400).json({
+                success: false,
+                error: 'Faltan campos requeridos: id_cita, id_paciente, id_medico o estado_actual'
+            });
+        }
+
+        // Verificar existencia de cita, paciente y médico
+        const [cita, paciente, medico] = await Promise.all([
+            Cita.findByPk(req.body.id_cita),
+            Paciente.findByPk(req.body.id_paciente),
+            Medico.findByPk(req.body.id_medico)
+        ]);
+
+        if (!cita || !paciente || !medico) {
+            return res.status(404).json({
+                success: false,
+                error: 'Cita, paciente o médico no encontrado'
+            });
+        }
+
+        // Crear registro de historial
+        const nuevoRegistro = await HistorialCita.create({
+            id_cita: req.body.id_cita,
+            id_paciente: req.body.id_paciente,
+            id_medico: req.body.id_medico,
+            fecha_original: req.body.fecha_original || cita.fecha,
+            estado_anterior: req.body.estado_anterior || cita.estado,
+            estado_actual: req.body.estado_actual,
+            motivo_cambio: req.body.motivo_cambio || 'Modificación manual',
+            realizado_por: req.body.realizado_por || 'admin',
+            observaciones: req.body.observaciones
+        });
+
+        // Actualizar estado de la cita si es diferente
+        if (req.body.estado_actual !== cita.estado) {
+            await cita.update({ estado: req.body.estado_actual });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Registro de historial creado correctamente',
+            data: nuevoRegistro
+        });
+    } catch (error) {
+        console.error('Error al crear registro de historial:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al crear registro de historial',
+            details: error.errors?.map(e => e.message) || error.message
+        });
     }
 };

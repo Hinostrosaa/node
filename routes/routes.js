@@ -14,7 +14,10 @@ import {
     createCita,
     updateCita,
     deleteCita,
-    getAllHistorialCita 
+    getAllHistorialCita,
+    getHistorialByCita,  // Añade esta importación
+    getDetalleHistorial, // También asegúrate de importar esta si la usas
+    createRegistroHistorial // Y esta si también la necesitas 
 } from '../controllers/CmController.js';
 
 const router = express.Router();
@@ -40,6 +43,10 @@ router.put('/citas/:id', updateCita);
 router.delete('/citas/:id', deleteCita);
 
 // Rutas de Historial de Citas
+// Agregar estas rutas para el historial
 router.get('/historial-citas', getAllHistorialCita);
+router.get('/historial-citas/cita/:id', getHistorialByCita);
+router.get('/historial-citas/:id', getDetalleHistorial);
+router.post('/historial-citas', createRegistroHistorial);
 
 export default router;
