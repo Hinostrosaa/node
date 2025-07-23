@@ -320,19 +320,23 @@ export const getDetalleHistorial = async (req, res) => {
                 { 
                     model: Paciente, 
                     as: 'paciente',
-                    attributes: ['id_paciente', 'nombre', 'dni', 'telefono']
+                    attributes: ['id_paciente', 'nombre', 'dni', 'telefono'],
+                    required: false
                 },
                 { 
                     model: Medico, 
                     as: 'medico',
-                    attributes: ['id_medico', 'nombre', 'especialidad']
+                    attributes: ['id_medico', 'nombre', 'especialidad'],
+                    required: false
                 },
                 { 
                     model: Cita,
                     as: 'cita',
-                    attributes: ['id_cita', 'fecha', 'numero_confirmacion']
+                    attributes: ['id_cita', 'fecha', 'estado', 'numero_confirmacion'],
+                    required: false
                 }
-            ]
+            ],
+            plain: true // Convertir a objeto plano
         });
 
         if (!registro) {
@@ -342,27 +346,40 @@ export const getDetalleHistorial = async (req, res) => {
             });
         }
 
+        // Estructura de respuesta mejorada
+        const responseData = {
+            id_historial: registro.id_historial,
+            id_cita: registro.id_cita,
+            id_paciente: registro.id_paciente,
+            id_medico: registro.id_medico,
+            fecha_original: registro.fecha_original,
+            fecha_cambio: registro.fecha_cambio,
+            estado_anterior: registro.estado_anterior,
+            estado_actual: registro.estado_actual,
+            motivo_cambio: registro.motivo_cambio,
+            realizado_por: registro.realizado_por,
+            observaciones: registro.observaciones,
+            // Incluir objetos relacionados
+            paciente: registro.paciente || null,
+            medico: registro.medico || null,
+            cita: registro.cita || null,
+            // Campos directos como respaldo
+            nombre_paciente: registro.paciente?.nombre || null,
+            nombre_medico: registro.medico?.nombre || null,
+            especialidad_medico: registro.medico?.especialidad || null
+        };
+
         res.json({
             success: true,
-            data: {
-                id_historial: registro.id_historial,
-                fecha_original: registro.fecha_original,
-                fecha_cambio: registro.fecha_cambio,
-                estado_anterior: registro.estado_anterior,
-                estado_actual: registro.estado_actual,
-                motivo_cambio: registro.motivo_cambio,
-                observaciones: registro.observaciones,
-                paciente: registro.paciente,
-                medico: registro.medico,
-                cita: registro.cita
-            }
+            data: responseData
         });
     } catch (error) {
         console.error('Error al obtener detalle de historial:', error);
         res.status(500).json({
             success: false,
             error: 'Error al obtener detalle del registro',
-            details: error.message
+            details: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 };
