@@ -4,20 +4,20 @@ import {
     getPaciente, 
     createPaciente, 
     updatePaciente, 
-    deletePaciente, 
-    getAllMedicos, 
-    getMedico, 
-    createMedico, 
-    updateMedico, 
+    deletePaciente,
+    getAllMedicos,
+    getMedico,
+    createMedico,
+    updateMedico,
     deleteMedico,
     getAllCita,
     createCita,
     updateCita,
     deleteCita,
     getAllHistorialCita,
-    getHistorialByCita,  // Añade esta importación
-    getDetalleHistorial, // También asegúrate de importar esta si la usas
-    createRegistroHistorial // Y esta si también la necesitas 
+    getHistorialByCita,
+    getDetalleHistorial,
+    createRegistroHistorial
 } from '../controllers/CmController.js';
 
 const router = express.Router();
@@ -36,14 +36,13 @@ router.post('/medicos', createMedico);
 router.put('/medicos/:id', updateMedico);
 router.delete('/medicos/:id', deleteMedico);
 
-// Rutas de Citas (CORREGIDAS)
+// Rutas de Citas
 router.get('/citas', getAllCita);
 router.post('/citas', createCita);
 router.put('/citas/:id', updateCita);
 router.delete('/citas/:id', deleteCita);
 
 // Rutas de Historial de Citas
-// Agregar estas rutas para el historial
 router.get('/historial-citas', getAllHistorialCita);
 router.get('/historial-citas/cita/:id', getHistorialByCita);
 router.get('/historial-citas/:id', getDetalleHistorial);
