@@ -21,37 +21,62 @@ export const login = async (req, res) => {
     try {
         const { username, password } = req.body;
         
+        
+        console.log('Intento de login para:', username); // Log de depuración
+        
         if (!username || !password) {
             return res.status(400).json({ 
                 success: false,
-                error: 'Nombre de usuario y contraseña son requeridos'
+                message: 'Nombre de usuario y contraseña son requeridos'
             });
         }
 
-        const user = await Usuario.findOne({ where: { username } });
+        const user = await Usuario.findOne({ 
+            where: { username },
+            attributes: ['id_usuario', 'username', 'email', 'rol', 'password_hash']
+        });
+        
         if (!user) {
+            console.log('Usuario no encontrado'); // Log de depuración
             return res.status(401).json({
                 success: false,
-                error: 'Credenciales inválidas'
+                message: 'Credenciales inválidas'
             });
         }
 
-        // Cambio importante: Usamos bcryptjs directamente en lugar del método del modelo
-        const isValidPassword = await comparePasswords(password, user.password_hash);
+        console.log('Usuario encontrado. Comparando contraseñas...'); // Log
+        console.log('Hash almacenado:', user.password_hash); // Log
+        
+        const isValidPassword = await bcryptjs.compare(password, user.password_hash);
+        console.log('Resultado comparación:', isValidPassword); // Log importante
+        
         if (!isValidPassword) {
+            console.log('Contraseña incorrecta'); // Log
             return res.status(401).json({
                 success: false,
-                error: 'Credenciales inválidas'
+                message: 'Credenciales inválidas'
             });
         }
 
         const token = jwt.sign(
-            { id: user.id_usuario, username: user.username, rol: user.rol },
+            { 
+                id: user.id_usuario, 
+                username: user.username, 
+                rol: user.rol 
+            },
             JWT_SECRET,
             { expiresIn: JWT_EXPIRES_IN }
         );
 
-        res.json({
+        // Establecer cookie HTTP-only (opcional pero recomendado)
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 8 * 60 * 60 * 1000 // 8 horas
+        });
+
+        return res.json({
             success: true,
             token,
             user: {
@@ -64,10 +89,10 @@ export const login = async (req, res) => {
 
     } catch (error) {
         console.error('Error en login:', error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            error: 'Error en el servidor',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: 'Error en el servidor',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
