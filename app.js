@@ -4,12 +4,16 @@ import cors from 'cors';
 import db from './database/db.js';
 // importamos el router
 import CmRoutes from './routes/routes.js';
+import authRoutes from './routes/authRoutes.js'; // Importa las nuevas rutas
+
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use('/Cms', CmRoutes);
+app.use('/auth', authRoutes); // Agrega las rutas de autenticación
+
 
 // Función async para conectar la base de datos
 const connectToDatabase = async () => {

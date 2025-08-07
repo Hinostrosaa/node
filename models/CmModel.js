@@ -188,7 +188,47 @@ const HistorialCita = db.define('historial_citas', {
     ]
 });
 
+// Modelo para usuario2 (versión simplificada)
+const Usuario2 = db.define('usuario2', {
+    id_usuario: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    username: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        unique: true
+    },
+    password: {
+        type: DataTypes.STRING(50), // Sin encriptación
+        allowNull: false
+    },
+    rol: {
+        type: DataTypes.ENUM('medico', 'administrador', 'recepcionista'),
+        allowNull: false
+    },
+    id_medico: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'medico',
+            key: 'id_medico'
+        }
+    }
+}, {
+    timestamps: true,
+    tableName: 'usuario2'
+});
+
+
 // Relaciones MEJORADAS
+
+Usuario2.belongsTo(Medico, {
+    foreignKey: 'id_medico',
+    as: 'medico'
+});
+
 Paciente.hasMany(Cita, { 
     foreignKey: 'id_paciente',
     as: 'citas'
@@ -232,4 +272,4 @@ HistorialCita.belongsTo(Medico, {
     as: 'medico'
 });
 
-export { Paciente, Medico, Cita, HistorialCita };
+export { Paciente, Medico, Cita, HistorialCita, Usuario2  };
