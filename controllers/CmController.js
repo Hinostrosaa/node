@@ -1,4 +1,5 @@
 import { Paciente, Medico, Cita, HistorialCita  } from "../models/CmModel.js";  // Importar los modelos nombrados
+import { Sequelize, Op  } from 'sequelize';
 
 // CRUD para Pacientes
 
@@ -437,6 +438,202 @@ export const createRegistroHistorial = async (req, res) => {
             success: false,
             error: 'Error al crear registro de historial',
             details: error.errors?.map(e => e.message) || error.message
+        });
+    }
+};
+
+// Obtener médicos por especialidad (versión corregida)
+export const getMedicosByEspecialidad = async (req, res) => {
+    try {
+        const { especialidad } = req.query;
+        
+        if (!especialidad) {
+            return res.status(400).json({
+                success: false,
+                error: 'El parámetro especialidad es requerido'
+            });
+        }
+
+        const medicos = await Medico.findAll({
+            where: { 
+                especialidad: {
+                    [Op.like]: `%${especialidad}%`
+                }
+            },
+            attributes: ['id_medico', 'nombre', 'especialidad', 'años_experiencia'],
+            order: [['nombre', 'ASC']]
+        });
+
+        if (!medicos || medicos.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'No se encontraron médicos para la especialidad especificada'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: medicos
+        });
+    } catch (error) {
+        console.error('Error al obtener médicos por especialidad:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al obtener médicos',
+            message: error.message
+        });
+    }
+};
+
+
+// Obtener disponibilidad de un médico
+export const getDisponibilidadMedico = async (req, res) => {
+    try {
+        const { id_medico, fecha } = req.query;
+        
+        // Validar parámetros
+        if (!id_medico || !fecha) {
+            return res.status(400).json({ error: 'Se requieren id_medico y fecha' });
+        }
+
+        // Convertir la fecha recibida a objeto Date
+        const fechaConsulta = new Date(fecha);
+        const inicioDia = new Date(fechaConsulta);
+        inicioDia.setHours(0, 0, 0, 0);
+        const finDia = new Date(fechaConsulta);
+        finDia.setHours(23, 59, 59, 999);
+
+        // Obtener citas existentes para el médico en ese día
+        const citas = await Cita.findAll({
+            where: {
+                id_medico,
+                fecha: {
+                    [Op.between]: [inicioDia, finDia]
+                }
+            },
+            attributes: ['id_cita', 'fecha', 'estado']
+        });
+
+        // Generar horarios disponibles (simplificado)
+        const horariosDisponibles = generarHorariosDisponibles(fechaConsulta, citas);
+
+        res.json({
+            success: true,
+            disponibilidad: horariosDisponibles
+        });
+    } catch (error) {
+        console.error('Error al obtener disponibilidad:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Error al obtener disponibilidad',
+            details: error.message 
+        });
+    }
+};
+
+// Función auxiliar para generar horarios disponibles
+function generarHorariosDisponibles(fecha, citasExistentes) {
+    const horarios = [];
+    const horaInicio = 8; // 8:00 AM
+    const horaFin = 18;   // 6:00 PM
+    const duracionCita = 30; // minutos
+
+    // Convertir citas existentes a formato comparable
+    const citasOcupadas = citasExistentes.map(c => {
+        const fechaCita = new Date(c.fecha);
+        return fechaCita.getHours() * 100 + fechaCita.getMinutes();
+    });
+
+    // Generar horarios cada 30 minutos
+    for (let hora = horaInicio; hora < horaFin; hora++) {
+        for (let minuto = 0; minuto < 60; minuto += duracionCita) {
+            const horario = new Date(fecha);
+            horario.setHours(hora, minuto, 0, 0);
+            
+            // Verificar si el horario está ocupado
+            const codigoHorario = hora * 100 + minuto;
+            const ocupado = citasOcupadas.includes(codigoHorario);
+
+            horarios.push({
+                hora: horario.toISOString(),
+                disponible: !ocupado,
+                horaFormateada: horario.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+        }
+    }
+
+    return horarios;
+}
+
+// Verificar disponibilidad de un horario específico
+export const verificarDisponibilidad = async (req, res) => {
+    try {
+        const { id_medico, fecha } = req.query;
+        
+        if (!id_medico || !fecha) {
+            return res.status(400).json({ error: 'Se requieren id_medico y fecha' });
+        }
+
+        const fechaCita = new Date(fecha);
+        const inicioSlot = new Date(fechaCita);
+        const finSlot = new Date(fechaCita);
+        finSlot.setMinutes(finSlot.getMinutes() + 30);
+
+        // Verificar si ya existe una cita en ese horario
+        const citaExistente = await Cita.findOne({
+            where: {
+                id_medico,
+                fecha: {
+                    [Op.between]: [inicioSlot, finSlot]
+                }
+            }
+        });
+
+        res.json({
+            disponible: !citaExistente,
+            mensaje: citaExistente ? 'Horario no disponible' : 'Horario disponible'
+        });
+    } catch (error) {
+        console.error('Error al verificar disponibilidad:', error);
+        res.status(500).json({ 
+            error: 'Error al verificar disponibilidad',
+            details: error.message 
+        });
+    }
+};
+
+// Obtener especialidades (versión corregida)
+export const getEspecialidades = async (req, res) => {
+    try {
+        const especialidades = await Medico.findAll({
+            attributes: [
+                [Sequelize.fn('DISTINCT', Sequelize.col('especialidad')), 'especialidad']
+            ],
+            order: [['especialidad', 'ASC']],
+            raw: true
+        });
+
+        const especialidadesList = especialidades
+            .map(e => e.especialidad)
+            .filter(e => e && e.trim() !== ''); // Filtrar valores nulos o vacíos
+
+        if (!especialidadesList.length) {
+            return res.status(404).json({
+                success: false,
+                error: 'No se encontraron especialidades registradas'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: especialidadesList
+        });
+    } catch (error) {
+        console.error('Error al obtener especialidades:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al obtener especialidades',
+            message: error.message
         });
     }
 };

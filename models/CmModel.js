@@ -55,7 +55,8 @@ const Medico = db.define('medico', {
         type: DataTypes.STRING(8),  // Cambié a STRING para que coincida con varchar(8)
         allowNull: false
     },
-    especialidad: { type: DataTypes.STRING(100),
+    especialidad: {  // Este es el campo correcto que debes usar
+        type: DataTypes.STRING(100),
         allowNull: false
     },
     años_experiencia: { type: DataTypes.STRING(2),  // Cambié a STRING para que coincida con varchar(8)
@@ -222,7 +223,9 @@ const Usuario2 = db.define('usuario2', {
 });
 
 
+
 // Relaciones MEJORADAS
+
 
 Usuario2.belongsTo(Medico, {
     foreignKey: 'id_medico',
