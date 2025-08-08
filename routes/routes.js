@@ -29,6 +29,7 @@ router.post('/pacientes', createPaciente);
 router.put('/pacientes/:id', updatePaciente);
 router.delete('/pacientes/:id', deletePaciente);
 
+
 // Rutas de Médicos
 router.get('/medicos', getAllMedicos);
 router.get('/medicos/:id', getMedico);

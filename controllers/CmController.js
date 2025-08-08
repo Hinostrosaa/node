@@ -4,7 +4,13 @@ import { Paciente, Medico, Cita, HistorialCita  } from "../models/CmModel.js";  
 
 export const getAllPacientes = async (req, res) => {
     try {
-        const pacientes = await Paciente.findAll();  // Obtenemos todos los pacientes
+        const { dni, nombre } = req.query;
+        
+        let where = {};
+        if (dni) where.dni = dni;
+        if (nombre) where.nombre = { [Op.like]: `%${nombre}%` };
+
+        const pacientes = await Paciente.findAll({ where });
         res.json(pacientes);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -62,7 +68,13 @@ export const deletePaciente = async (req, res) => {
 
 export const getAllMedicos = async (req, res) => {
     try {
-        const medicos = await Medico.findAll();  // Obtenemos todos los médicos
+        const { dni, especialidad } = req.query;
+        
+        let where = {};
+        if (dni) where.dni = dni;
+        if (especialidad) where.especialidad = especialidad;
+
+        const medicos = await Medico.findAll({ where });
         res.json(medicos);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -145,8 +157,10 @@ export const createCita = async (req, res) => {
         }
 
         // Verificar existencia de paciente y médico
-        const pacienteExists = await Paciente.findByPk(req.body.id_paciente);
-        const medicoExists = await Medico.findByPk(req.body.id_medico);
+        const [pacienteExists, medicoExists] = await Promise.all([
+            Paciente.findByPk(req.body.id_paciente),
+            Medico.findByPk(req.body.id_medico)
+        ]);
         
         if (!pacienteExists || !medicoExists) {
             return res.status(404).json({ 
@@ -163,6 +177,8 @@ export const createCita = async (req, res) => {
             numero_confirmacion: req.body.numero_confirmacion || null
         });
 
+        // El trigger after_cita_insert se encargará del historial
+
         res.status(201).json({
             message: 'Cita creada correctamente',
             cita: nuevaCita
@@ -175,6 +191,7 @@ export const createCita = async (req, res) => {
         });
     }
 };
+
 
 export const updateCita = async (req, res) => {
     try {
@@ -220,16 +237,23 @@ export const deleteCita = async (req, res) => {
 
 export const getAllHistorialCita = async (req, res) => {
     try {
-        const { id_paciente, id_medico, estado, fecha_inicio, fecha_fin } = req.query;
+        const { id_cita, estado, fecha_inicio, fecha_fin } = req.query;
         
         const where = {};
-        if (id_paciente) where.id_paciente = id_paciente;
-        if (id_medico) where.id_medico = id_medico;
+        if (id_cita) where.id_cita = id_cita;
         if (estado) where.estado_actual = estado;
         
         if (fecha_inicio && fecha_fin) {
             where.fecha_cambio = {
                 [Op.between]: [new Date(fecha_inicio), new Date(fecha_fin)]
+            };
+        } else if (fecha_inicio) {
+            where.fecha_cambio = {
+                [Op.gte]: new Date(fecha_inicio)
+            };
+        } else if (fecha_fin) {
+            where.fecha_cambio = {
+                [Op.lte]: new Date(fecha_fin)
             };
         }
 
@@ -268,7 +292,7 @@ export const getAllHistorialCita = async (req, res) => {
         res.status(500).json({ 
             success: false,
             error: 'Error al obtener historial de citas',
-            details: error.errors?.map(e => e.message) || error.message 
+            details: error.message
         });
     }
 };
@@ -440,3 +464,4 @@ export const createRegistroHistorial = async (req, res) => {
         });
     }
 };
+
