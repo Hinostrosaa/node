@@ -107,7 +107,25 @@ const Cita = db.define('citas', {
     }
 }, {
     timestamps: true,
-    tableName: 'citas'
+    tableName: 'citas',
+    indexes: [
+        {
+            fields: ['id_paciente']
+        },
+        {
+            fields: ['id_medico']
+        },
+        {
+            fields: ['fecha']
+        },
+        {
+            fields: ['estado']
+        },
+        {
+            fields: ['id_medico', 'fecha'],
+            unique: true
+        }
+    ]
 });
 
 // Modelo HistorialCita (VERSIÓN MEJORADA)
@@ -242,11 +260,16 @@ Medico.hasMany(Cita, {
 });
 Cita.belongsTo(Paciente, { 
     foreignKey: 'id_paciente',
-    as: 'paciente'
+    as: 'paciente',
+    onDelete: 'RESTRICT',
+    onUpdate: 'CASCADE'
 });
+
 Cita.belongsTo(Medico, { 
     foreignKey: 'id_medico',
-    as: 'medico'
+    as: 'medico',
+    onDelete: 'RESTRICT',
+    onUpdate: 'CASCADE'
 });
 
 // Relaciones del Historial

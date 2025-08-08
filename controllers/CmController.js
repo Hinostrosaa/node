@@ -136,43 +136,117 @@ export const getAllCita = async (req, res) => {
     }
 };
 
+// Versión mejorada de createCita en CmController.js
 export const createCita = async (req, res) => {
     try {
-        // Validación de campos requeridos
-        if (!req.body.id_paciente || !req.body.id_medico || !req.body.fecha) {
-            return res.status(400).json({ 
-                error: 'Faltan campos requeridos: id_paciente, id_medico o fecha' 
-            });
-        }
-
-        // Verificar existencia de paciente y médico
-        const pacienteExists = await Paciente.findByPk(req.body.id_paciente);
-        const medicoExists = await Medico.findByPk(req.body.id_medico);
+        // Validación de campos requeridos mejorada
+        const requiredFields = ['id_paciente', 'id_medico', 'fecha'];
+        const missingFields = requiredFields.filter(field => !req.body[field]);
         
-        if (!pacienteExists || !medicoExists) {
-            return res.status(404).json({ 
-                error: 'Paciente o Médico no encontrado' 
+        if (missingFields.length > 0) {
+            return res.status(400).json({ 
+                success: false,
+                error: `Faltan campos requeridos: ${missingFields.join(', ')}` 
             });
         }
 
-        // Crear la cita
+        // Verificar existencia de paciente y médico de forma concurrente
+        const [pacienteExists, medicoExists] = await Promise.all([
+            Paciente.findByPk(req.body.id_paciente),
+            Medico.findByPk(req.body.id_medico)
+        ]);
+        
+        if (!pacienteExists) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'Paciente no encontrado',
+                field: 'id_paciente'
+            });
+        }
+
+        if (!medicoExists) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'Médico no encontrado',
+                field: 'id_medico'
+            });
+        }
+
+        // Formatear fecha correctamente
+        let fechaCita;
+        try {
+            fechaCita = new Date(req.body.fecha);
+            if (isNaN(fechaCita.getTime())) {
+                throw new Error('Fecha inválida');
+            }
+        } catch (error) {
+            return res.status(400).json({
+                success: false,
+                error: 'Formato de fecha inválido. Use YYYY-MM-DDTHH:MM:SS',
+                details: error.message
+            });
+        }
+
+        // Verificar disponibilidad del médico
+        const inicioSlot = new Date(fechaCita);
+        const finSlot = new Date(fechaCita);
+        finSlot.setMinutes(finSlot.getMinutes() + 30);
+
+        const citaExistente = await Cita.findOne({
+            where: {
+                id_medico: req.body.id_medico,
+                fecha: {
+                    [Op.between]: [inicioSlot, finSlot]
+                },
+                estado: {
+                    [Op.notIn]: ['cancelada', 'completada']
+                }
+            }
+        });
+
+        if (citaExistente) {
+            return res.status(409).json({
+                success: false,
+                error: 'El médico ya tiene una cita programada en este horario',
+                conflicto: {
+                    id_cita: citaExistente.id_cita,
+                    fecha: citaExistente.fecha,
+                    paciente: await Paciente.findByPk(citaExistente.id_paciente, {
+                        attributes: ['id_paciente', 'nombre']
+                    })
+                }
+            });
+        }
+
+        // Crear la cita con datos formateados
         const nuevaCita = await Cita.create({
             id_paciente: req.body.id_paciente,
             id_medico: req.body.id_medico,
-            fecha: new Date(req.body.fecha),
+            fecha: fechaCita,
             estado: req.body.estado || 'pendiente',
             numero_confirmacion: req.body.numero_confirmacion || null
         });
 
+        // Incluir información relacionada en la respuesta
+        const citaConRelaciones = await Cita.findByPk(nuevaCita.id_cita, {
+            include: [
+                { model: Paciente, as: 'paciente', attributes: ['id_paciente', 'nombre'] },
+                { model: Medico, as: 'medico', attributes: ['id_medico', 'nombre', 'especialidad'] }
+            ]
+        });
+
         res.status(201).json({
+            success: true,
             message: 'Cita creada correctamente',
-            cita: nuevaCita
+            data: citaConRelaciones
         });
     } catch (error) {
         console.error('Error al crear cita:', error);
         res.status(500).json({ 
+            success: false,
             error: 'Error al crear cita',
-            details: error.errors?.map(e => e.message) || error.message 
+            details: error.errors?.map(e => e.message) || error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 };
@@ -487,46 +561,95 @@ export const getMedicosByEspecialidad = async (req, res) => {
 
 
 // Obtener disponibilidad de un médico
+// Versión corregida de getDisponibilidadMedico
 export const getDisponibilidadMedico = async (req, res) => {
     try {
         const { id_medico, fecha } = req.query;
         
-        // Validar parámetros
+        // Validación robusta
         if (!id_medico || !fecha) {
-            return res.status(400).json({ error: 'Se requieren id_medico y fecha' });
+            return res.status(400).json({
+                success: false,
+                error: 'Parámetros requeridos: id_medico (número) y fecha (YYYY-MM-DD)'
+            });
         }
 
-        // Convertir la fecha recibida a objeto Date
+        // Convertir id_medico a número
+        const medicoId = parseInt(id_medico, 10);
+        if (isNaN(medicoId)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de médico debe ser un número válido'
+            });
+        }
+
+        // Verificar que el médico existe
+        const medico = await Medico.findByPk(medicoId);
+        if (!medico) {
+            const medicosExistentes = await Medico.findAll({
+                attributes: ['id_medico', 'nombre', 'especialidad'],
+                order: [['id_medico', 'ASC']]
+            });
+            
+            return res.status(404).json({
+                success: false,
+                error: `Médico con ID ${medicoId} no encontrado`,
+                medicosExistentes,
+                sugerencia: 'Médicos disponibles en el sistema:',
+                idsDisponibles: medicosExistentes.map(m => m.id_medico)
+            });
+        }
+
+        // Convertir la fecha recibida
         const fechaConsulta = new Date(fecha);
+        if (isNaN(fechaConsulta.getTime())) {
+            return res.status(400).json({
+                success: false,
+                error: 'Formato de fecha inválido',
+                expected_format: 'YYYY-MM-DD'
+            });
+        }
+
         const inicioDia = new Date(fechaConsulta);
         inicioDia.setHours(0, 0, 0, 0);
         const finDia = new Date(fechaConsulta);
         finDia.setHours(23, 59, 59, 999);
 
-        // Obtener citas existentes para el médico en ese día
+        // Obtener citas existentes
         const citas = await Cita.findAll({
             where: {
                 id_medico,
                 fecha: {
                     [Op.between]: [inicioDia, finDia]
+                },
+                estado: {
+                    [Op.notIn]: ['cancelada', 'completada']
                 }
             },
-            attributes: ['id_cita', 'fecha', 'estado']
+            attributes: ['id_cita', 'fecha', 'estado'],
+            order: [['fecha', 'ASC']]
         });
 
-        // Generar horarios disponibles (simplificado)
+        // Generar horarios disponibles
         const horariosDisponibles = generarHorariosDisponibles(fechaConsulta, citas);
 
         res.json({
             success: true,
-            disponibilidad: horariosDisponibles
+            data: {
+                medico: {
+                    id_medico: medico.id_medico,
+                    nombre: medico.nombre,
+                    especialidad: medico.especialidad
+                },
+                fecha: fechaConsulta.toISOString(),
+                disponibilidad: horariosDisponibles
+            }
         });
     } catch (error) {
-        console.error('Error al obtener disponibilidad:', error);
-        res.status(500).json({ 
+        console.error('Error en getDisponibilidadMedico:', error);
+        res.status(500).json({
             success: false,
-            error: 'Error al obtener disponibilidad',
-            details: error.message 
+            error: 'Error interno del servidor'
         });
     }
 };

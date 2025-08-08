@@ -39,6 +39,8 @@ router.get('/medicos/:id', getMedico);
 router.post('/medicos', createMedico);
 router.put('/medicos/:id', updateMedico);
 router.delete('/medicos/:id', deleteMedico);
+router.get('/medicos/disponibilidad', getDisponibilidadMedico);
+
 
 
 // Rutas de Citas (CORREGIDAS)
@@ -56,7 +58,6 @@ router.post('/historial-citas', createRegistroHistorial);
 
 // Nuevas rutas para disponibilidad
 router.get('/medicos-por-especialidad', getMedicosByEspecialidad);
-router.get('/medicos/disponibilidad', getDisponibilidadMedico);
 router.get('/medicos/verificar-disponibilidad', verificarDisponibilidad);
 router.get('/especialidades', getEspecialidades);
 
